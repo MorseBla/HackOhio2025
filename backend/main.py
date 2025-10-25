@@ -1,76 +1,84 @@
-from fastapi import FastAPI, Query
-from fastapi.middleware.cors import CORSMiddleware
-import requests
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+import json
+import os
+from datetime import datetime
 
-app = FastAPI()
+app = Flask(__name__)
+CORS(app)
 
-# Enable CORS for frontend
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+base_dir = os.path.dirname(__file__)
 
-API_BASE = "https://content.osu.edu/v2/classes/search"
+with open(os.path.join(base_dir, "../buildings/usable_buildings2.json"), "r") as f:
+    usable_buildings = json.load(f)
 
-# Pick a known working term code (Autumn 2024 = 1248, Spring 2025 = 1252, Summer 2025 = 1254, Autumn 2025 = 1258)
-DEFAULT_TERM = "1248"
+with open(os.path.join(base_dir, "../buildings/building_classes2.json"), "r") as f:
+    building_data = json.load(f)
 
-@app.get("/taken")
-def taken(
-    building: str = Query(..., description="Building name, e.g. 'Dreese Laboratories'"),
-    term: str = Query(DEFAULT_TERM, description="OSU term code, default Autumn 2024"),
-    pages: int = Query(3, description="How many pages of results to fetch")
-):
-    """
-    Example: /taken?building=Dreese%20Laboratories&term=1248
-    """
-    results = []
 
-    for p in range(1, pages + 1):
-        resp = requests.get(API_BASE, params={
-            "q": building,
-            "term": term,
-            "p": p
-        })
-        if resp.status_code != 200:
-            return {"error": f"API request failed with status {resp.status_code}"}
-        data = resp.json()
+@app.route("/api/buildings", methods=["GET"])
+def get_buildings():
+    return jsonify(usable_buildings)
 
-        for course in data.get("data", {}).get("courses", []):
-            for sec in course.get("sections", []):
-                for m in sec.get("meetings", []):
-                    facility = m.get("facilityDescription", "")
-                    if facility and building.lower() in facility.lower():
-                        results.append({
-                            "courseTitle": sec.get("courseTitle"),
-                            "subject": sec.get("subject"),
-                            "catalogNumber": sec.get("catalogNumber"),
-                            "section": sec.get("section"),
-                            "room": m.get("room"),
-                            "building": facility,
-                            "startTime": m.get("startTime"),
-                            "endTime": m.get("endTime"),
-                            "days": {
-                                "mon": m.get("monday"),
-                                "tue": m.get("tuesday"),
-                                "wed": m.get("wednesday"),
-                                "thu": m.get("thursday"),
-                                "fri": m.get("friday"),
-                                "sat": m.get("saturday"),
-                                "sun": m.get("sunday"),
-                            },
-                            "instructors": [i["displayName"] for i in m.get("instructors", [])],
-                            "capacity": m.get("facilityCapacity"),
-                            "startDate": m.get("startDate"),
-                            "endDate": m.get("endDate")
-                        })
 
-    return {
-        "building": building,
-        "term": term,
-        "taken_slots": results
-    }
+@app.route("/api/buildings/<building_name>", methods=["GET"])
+def get_building(building_name):
+    building_name = building_name.replace("%20", " ")
+    if building_name in building_data:
+        return jsonify(building_data[building_name])
+    else:
+        return jsonify({"error": "Building not found"}), 404
+
+
+@app.route("/api/availability/<building_name>", methods=["GET"])
+def get_availability(building_name):
+    building_name = building_name.replace("%20", " ")
+    start_str = request.args.get("start")  # "13:00"
+    end_str = request.args.get("end")      # "15:00"
+    day = request.args.get("day", "mon").lower()
+
+    if building_name not in building_data:
+        return jsonify({"error": "Building not found"}), 404
+    if not start_str or not end_str:
+        return jsonify({"error": "Missing 'start' or 'end' parameter"}), 400
+
+    # Parse input times
+    try:
+        start_time = datetime.strptime(start_str, "%H:%M").time()
+        end_time = datetime.strptime(end_str, "%H:%M").time()
+    except ValueError:
+        return jsonify({"error": "Times must be in HH:MM format"}), 400
+
+    data = building_data[building_name]
+    occupied_rooms = set()
+
+    for c in data["classes"]:
+        if not c["startTime"] or not c["endTime"]:
+            continue
+        if not c["days"].get(day, False):
+            continue
+
+        try:
+            class_start = datetime.strptime(c["startTime"], "%I:%M %p").time()
+            class_end = datetime.strptime(c["endTime"], "%I:%M %p").time()
+        except ValueError:
+            continue
+
+        # Check overlap
+        if not (class_end <= start_time or class_start >= end_time):
+            occupied_rooms.add(c["room"])
+
+    free_rooms = [r for r in data["rooms"] if r not in occupied_rooms]
+
+    return jsonify({
+        "building": building_name,
+        "day": day,
+        "requested_range": f"{start_str}–{end_str}",
+        "free_rooms": free_rooms,
+        "occupied_rooms": list(occupied_rooms)
+    })
+
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
 

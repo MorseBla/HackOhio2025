@@ -1,99 +1,60 @@
 import { useState } from "react";
+import usableBuildings from "../../buildings/usable_buildings2.json";
 
 function App() {
-  const [building, setBuilding] = useState("Dreese Laboratories");
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState("");
+  const [day, setDay] = useState("mon");
+  const [start, setStart] = useState("");
+  const [end, setEnd] = useState("");
+  const [availability, setAvailability] = useState(null);
 
-  const fetchTaken = async () => {
-    setLoading(true);
-    setResults(null);
-    try {
-      const url = `http://127.0.0.1:8000/taken?building=${encodeURIComponent(
-        building
-      )}&term=1258`; // change term if needed
-      const res = await fetch(url);
-      const data = await res.json();
-      setResults(data);
-    } catch (err) {
-      console.error(err);
-      setResults({ error: "Failed to fetch" });
-    }
-    setLoading(false);
+  const checkAvailability = () => {
+    if (!selected || !start || !end) return;
+
+    fetch(`http://127.0.0.1:5000/api/availability/${encodeURIComponent(selected)}?start=${start}&end=${end}&day=${day}`)
+      .then(res => res.json())
+      .then(setAvailability)
+      .catch(err => console.error(err));
   };
 
   return (
-    <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h2>OSU Room Usage Finder</h2>
+    <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
+      <h1>OSU Room Finder</h1>
 
-      <div style={{ marginBottom: "1rem" }}>
-        <label>Building: </label>
-        <input
-          value={building}
-          onChange={(e) => setBuilding(e.target.value)}
-          style={{ marginRight: "1rem" }}
-        />
-        <button onClick={fetchTaken}>Search</button>
-      </div>
+      {/* Building dropdown */}
+      <select value={selected} onChange={(e) => setSelected(e.target.value)}>
+        <option value="">-- Select a Building --</option>
+        {usableBuildings.map(b => (
+          <option key={b} value={b}>{b}</option>
+        ))}
+      </select>
 
-      {loading && <p>Loading...</p>}
-      {results?.error && <p style={{ color: "red" }}>{results.error}</p>}
+      {/* Day dropdown */}
+      <select value={day} onChange={(e) => setDay(e.target.value)} style={{ marginLeft: "10px" }}>
+        <option value="mon">Monday</option>
+        <option value="tue">Tuesday</option>
+        <option value="wed">Wednesday</option>
+        <option value="thu">Thursday</option>
+        <option value="fri">Friday</option>
+        <option value="sat">Saturday</option>
+        <option value="sun">Sunday</option>
+      </select>
 
-      {results && results.taken_slots && results.taken_slots.length > 0 && (
-        <div>
-          <h3>
-            Results for {results.building} — Term {results.term}
-          </h3>
-          <table
-            border="1"
-            cellPadding="5"
-            style={{ borderCollapse: "collapse", width: "100%" }}
-          >
-            <thead style={{ backgroundColor: "#f0f0f0" }}>
-              <tr>
-                <th>Room</th>
-                <th>Course</th>
-                <th>Subject</th>
-                <th>Catalog</th>
-                <th>Section</th>
-                <th>Time</th>
-                <th>Days</th>
-                <th>Instructor(s)</th>
-                <th>Capacity</th>
-                <th>Dates</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.taken_slots.map((slot, idx) => (
-                <tr key={idx}>
-                  <td>{slot.room}</td>
-                  <td>{slot.courseTitle}</td>
-                  <td>{slot.subject}</td>
-                  <td>{slot.catalogNumber}</td>
-                  <td>{slot.section}</td>
-                  <td>
-                    {slot.startTime} – {slot.endTime}
-                  </td>
-                  <td>
-                    {Object.entries(slot.days)
-                      .filter(([_, val]) => val)
-                      .map(([day]) => day[0].toUpperCase())
-                      .join(", ")}
-                  </td>
-                  <td>{slot.instructors.join(", ")}</td>
-                  <td>{slot.capacity}</td>
-                  <td>
-                    {slot.startDate} → {slot.endDate}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Time inputs */}
+      <input type="time" value={start} onChange={(e) => setStart(e.target.value)} style={{ marginLeft: "10px" }} />
+      <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} style={{ marginLeft: "10px" }} />
+
+      <button onClick={checkAvailability} style={{ marginLeft: "10px" }}>
+        Check Availability
+      </button>
+
+      {availability && (
+        <div style={{ marginTop: "20px" }}>
+          <h2>{availability.building}</h2>
+          <p>Day: {availability.day}, Time Range: {availability.requested_range}</p>
+          <p><b>Free Rooms:</b> {availability.free_rooms.join(", ") || "None"}</p>
+          <p><b>Occupied Rooms:</b> {availability.occupied_rooms.join(", ") || "None"}</p>
         </div>
-      )}
-
-      {results && results.taken_slots && results.taken_slots.length === 0 && (
-        <p>No scheduled classes found for that building/term.</p>
       )}
     </div>
   );
