@@ -1,99 +1,58 @@
 import { useState } from "react";
+import usableBuildings from "../../buildings/usable_buildings2.json";
 
 function App() {
-  const [building, setBuilding] = useState("Dreese Laboratories");
-  const [results, setResults] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [selected, setSelected] = useState("");
+  const [buildingData, setBuildingData] = useState(null);
 
-  const fetchTaken = async () => {
-    setLoading(true);
-    setResults(null);
-    try {
-      const url = `http://127.0.0.1:8000/taken?building=${encodeURIComponent(
-        building
-      )}&term=1258`; // change term if needed
-      const res = await fetch(url);
-      const data = await res.json();
-      setResults(data);
-    } catch (err) {
-      console.error(err);
-      setResults({ error: "Failed to fetch" });
+  const handleSelect = (building) => {
+    setSelected(building);
+    if (!building) {
+      setBuildingData(null);
+      return;
     }
-    setLoading(false);
+
+    console.log("Fetching data for:", building);
+
+    fetch(`http://127.0.0.1:5000/api/buildings/${encodeURIComponent(building)}`)
+      .then(res => {
+        if (!res.ok) throw new Error("Failed to fetch building data");
+        return res.json();
+      })
+      .then(data => {
+        console.log("Data received:", data);
+        setBuildingData(data);
+      })
+      .catch(err => console.error("Error fetching building:", err));
   };
 
   return (
-    <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
-      <h2>OSU Room Usage Finder</h2>
+    <div style={{ padding: "20px", fontFamily: "sans-serif" }}>
+      <h1>OSU Room Finder</h1>
 
-      <div style={{ marginBottom: "1rem" }}>
-        <label>Building: </label>
-        <input
-          value={building}
-          onChange={(e) => setBuilding(e.target.value)}
-          style={{ marginRight: "1rem" }}
-        />
-        <button onClick={fetchTaken}>Search</button>
-      </div>
+      <select value={selected} onChange={(e) => handleSelect(e.target.value)}>
+        <option value="">-- Select a Building --</option>
+        {usableBuildings.map(b => (
+          <option key={b} value={b}>{b}</option>
+        ))}
+      </select>
 
-      {loading && <p>Loading...</p>}
-      {results?.error && <p style={{ color: "red" }}>{results.error}</p>}
+      {buildingData && (
+        <div style={{ marginTop: "20px" }}>
+          <h2>{selected}</h2>
+          <h3>Rooms: {buildingData.rooms.join(", ")}</h3>
 
-      {results && results.taken_slots && results.taken_slots.length > 0 && (
-        <div>
-          <h3>
-            Results for {results.building} — Term {results.term}
-          </h3>
-          <table
-            border="1"
-            cellPadding="5"
-            style={{ borderCollapse: "collapse", width: "100%" }}
-          >
-            <thead style={{ backgroundColor: "#f0f0f0" }}>
-              <tr>
-                <th>Room</th>
-                <th>Course</th>
-                <th>Subject</th>
-                <th>Catalog</th>
-                <th>Section</th>
-                <th>Time</th>
-                <th>Days</th>
-                <th>Instructor(s)</th>
-                <th>Capacity</th>
-                <th>Dates</th>
-              </tr>
-            </thead>
-            <tbody>
-              {results.taken_slots.map((slot, idx) => (
-                <tr key={idx}>
-                  <td>{slot.room}</td>
-                  <td>{slot.courseTitle}</td>
-                  <td>{slot.subject}</td>
-                  <td>{slot.catalogNumber}</td>
-                  <td>{slot.section}</td>
-                  <td>
-                    {slot.startTime} – {slot.endTime}
-                  </td>
-                  <td>
-                    {Object.entries(slot.days)
-                      .filter(([_, val]) => val)
-                      .map(([day]) => day[0].toUpperCase())
-                      .join(", ")}
-                  </td>
-                  <td>{slot.instructors.join(", ")}</td>
-                  <td>{slot.capacity}</td>
-                  <td>
-                    {slot.startDate} → {slot.endDate}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <h3>Classes</h3>
+          <ul>
+            {buildingData.classes.map((c, idx) => (
+              <li key={idx}>
+                Room {c.room} — {c.startTime} to {c.endTime} (
+                  {Object.keys(c.days).filter(d => c.days[d]).join(", ")}
+                )
+              </li>
+            ))}
+          </ul>
         </div>
-      )}
-
-      {results && results.taken_slots && results.taken_slots.length === 0 && (
-        <p>No scheduled classes found for that building/term.</p>
       )}
     </div>
   );

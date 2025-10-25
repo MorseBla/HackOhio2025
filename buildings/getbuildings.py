@@ -8,7 +8,7 @@ TERM = "1258"   # Autumn 2024 (change if needed)
 
 usable_buildings = set()
 
-with open("b.csv", "r") as f:
+with open("buildings.csv", "r") as f:
     reader = csv.reader(f)
     all_buildings = [row[0].strip() for row in reader if row]
 
@@ -46,7 +46,7 @@ for building in all_buildings:
     time.sleep(0.2)
 
 # Save usable list
-with open("usable_buildings.json", "w") as f:
+with open("usable_buildings2.json", "w") as f:
     json.dump(sorted(usable_buildings), f, indent=2)
 
 print(f"\n✅ Found {len(usable_buildings)} usable buildings")
