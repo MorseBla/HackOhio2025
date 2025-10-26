@@ -4,6 +4,7 @@ import math
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
+from storage import load_groups, save_groups
 
 # -----------------------------
 # App + CORS
@@ -11,7 +12,7 @@ from flask_cors import CORS
 app = Flask(__name__)
 
 # In dev: allow Vite (localhost:5173). Add your Netlify URL when deployed.
-CORS(app, resources={r"/api/*": {"origins": ["https://osu-meeting-room-finder.netlify.app"]}}, supports_credentials=True)
+CORS(app)
 
 # accept both /path and /path/ without 404
 app.url_map.strict_slashes = False
@@ -51,7 +52,8 @@ building_data     = load_json("buildings/building_classes.json", {})         # n
 # In-memory groups structure
 # -----------------------------
 # groups = { "groupName": { "members": { "userId": (lat, lon), ... } } }
-groups = {}
+
+groups = load_groups()
 
 # -----------------------------
 # Utility functions
@@ -150,6 +152,7 @@ def create_group():
         # idempotent create
         return jsonify({"message": "Group already exists", "group": group}), 200
     groups[group] = {"members": {}}
+    save_groups(groups)
     return jsonify({"message": "Group created", "group": group}), 200
 
 @app.route("/api/join_group", methods=["POST"])
@@ -162,6 +165,7 @@ def join_group():
     if group not in groups:
         return jsonify({"error": "Group not found"}), 404
     groups[group]["members"].setdefault(user, None)
+    save_groups(groups)
     return jsonify({"message": f"{user} joined {group}"}), 200
 
 @app.route("/api/update_location", methods=["POST"])
@@ -189,6 +193,7 @@ def update_location():
         return jsonify({"error": "lat/lon must be numbers"}), 400
 
     groups[group]["members"][user] = (lat, lon)
+    save_groups(groups)
 
     # Gather current known coords
     coords = [c for c in groups[group]["members"].values() if c]
