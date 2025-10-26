@@ -76,7 +76,7 @@ def average_gps(*coords):
     lat_avg = math.atan2(z, hyp)
     return math.degrees(lat_avg), math.degrees(lon_avg)
 
-def haversine_km(a, b):
+def haversine(a, b):
     R = 6371.0
     lat1, lon1 = map(math.radians, a)
     lat2, lon2 = map(math.radians, b)
@@ -168,6 +168,59 @@ def join_group():
     save_groups(groups)
     return jsonify({"message": f"{user} joined {group}"}), 200
 
+@app.route("/api/manual_average", methods=["POST"])
+def manual_average():
+    data = request.json
+    buildings = data.get("buildings", [])
+    if not buildings:
+        return jsonify({"error": "No buildings provided"}), 400
+
+    coords = []
+    for b in buildings:
+        if b in building_coords:
+            coords.append(tuple(building_coords[b]))
+    if not coords:
+        return jsonify({"error": "No valid building coordinates"}), 400
+
+    avg_lat, avg_lon = average_gps(*coords)
+
+    # Find top 3 closest buildings with available rooms
+    today = datetime.today().strftime("%a").lower()[:3]
+    now = datetime.now().time()
+    candidates = []
+    for b, coord in building_coords.items():
+        if b not in building_data:
+            continue
+        dist = haversine((avg_lat, avg_lon), tuple(coord))
+        occupied = set()
+        for c in building_data[b]["classes"]:
+            if not c["startTime"] or not c["endTime"]:
+                continue
+            if not c["days"].get(today, False):
+                continue
+            try:
+                st = datetime.strptime(c["startTime"], "%I:%M %p").time()
+                et = datetime.strptime(c["endTime"], "%I:%M %p").time()
+            except:
+                continue
+            if not (et <= now or st >= now):
+                occupied.add(c["room"])
+        free_rooms = [r for r in building_data[b]["rooms"] if r not in occupied]
+        if free_rooms:
+            candidates.append((dist, b, free_rooms))
+
+    candidates.sort(key=lambda x: x[0])
+    top3 = [{"building": b, "free_rooms": rooms} for _, b, rooms in candidates[:3]]
+
+    return jsonify({
+        "average_location": [avg_lat, avg_lon],
+        "top_buildings": top3,
+        "selected_buildings": buildings
+    })
+
+
+
+
 @app.route("/api/update_location", methods=["POST"])
 def update_location():
     data = request.get_json(silent=True) or {}
@@ -212,7 +265,7 @@ def update_location():
         if bname not in building_data:
             continue
         try:
-            dist = haversine_km((avg_lat, avg_lon), (coord[0], coord[1]))
+            dist = haversine((avg_lat, avg_lon), (coord[0], coord[1]))
         except Exception:
             continue
         free = rooms_free_now(bname, when=now, day_key=today_key)
