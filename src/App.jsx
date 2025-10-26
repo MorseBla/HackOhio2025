@@ -1,144 +1,153 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 
 function App() {
-  const [buildings, setBuildings] = useState([]);
-  const [filteredBuildings, setFilteredBuildings] = useState([]);
-  const [selectedBuildings, setSelectedBuildings] = useState([]);
-  const [search, setSearch] = useState("");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
-  const [day, setDay] = useState("mon");
-  const [result, setResult] = useState(null);
+  const [step, setStep] = useState("start"); // "start" | "group" | "results"
+  const [group, setGroup] = useState("");
+  const [user, setUser] = useState("");
+  const [results, setResults] = useState(null);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetch("http://127.0.0.1:5001/api/buildings")
-      .then((res) => res.json())
-      .then((data) => {
-        setBuildings(data.buildings || []);
-        setFilteredBuildings(data.buildings || []);
-      })
-      .catch((err) => console.error("Error loading buildings:", err));
-  }, []);
-
-  const toggleBuilding = (b) => {
-    if (selectedBuildings.includes(b)) {
-      setSelectedBuildings(selectedBuildings.filter((x) => x !== b));
-    } else {
-      setSelectedBuildings([...selectedBuildings, b]);
-    }
-  };
-
-  const handleSearch = (e) => {
-    const value = e.target.value.toLowerCase();
-    setSearch(value);
-    setFilteredBuildings(
-      buildings.filter((b) => b.toLowerCase().includes(value))
-    );
-  };
-
-  const handleSubmit = async () => {
+  const BACKEND = import.meta.env.VITE_API_BASE;
+    
+    // Create group
+  const createGroup = async () => {
+    if (!group || !user) return;
     try {
-      const response = await fetch("http://127.0.0.1:5001/api/meeting-spot", {
+      const res = await fetch(`${BACKEND}/api/create_group`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          buildings: selectedBuildings,
-          start,
-          end,
-          day,
-        }),
+        body: JSON.stringify({ group, user }),
       });
-      const data = await response.json();
-      setResult(data);
+      if (!res.ok) throw new Error("Failed to create group");
+      setStep("group");
+      setError("");
     } catch (err) {
-      console.error("Error submitting request:", err);
+      setError("Error creating group");
     }
   };
 
+  // Join group
+  const joinGroup = async () => {
+    if (!group || !user) return;
+    try {
+      const res = await fetch(`${BACKEND}/api/join_group`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group, user }),
+      });
+      if (!res.ok) throw new Error("Failed to join group");
+      setStep("group");
+      setError("");
+    } catch (err) {
+      setError("Error joining group");
+    }
+  };
+
+  // GPS loop
+  useEffect(() => {
+    if (step !== "group" || !group || !user) return;
+
+    const sendLocation = () => {
+      if (!navigator.geolocation) {
+        setError("Geolocation not supported");
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const res = await fetch(`${BACKEND}/api/update_location`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                group,
+                user,
+                lat: pos.coords.latitude,
+                lon: pos.coords.longitude,
+              }),
+            });
+            if (!res.ok) {
+              const txt = await res.text();
+              setError(`Update error: ${txt}`);
+              return;
+            }
+            const data = await res.json();
+            setResults(data);
+          } catch (err) {
+            setError("Failed to update location");
+          }
+        },
+        (err) => setError("GPS error: " + err.message),
+        { enableHighAccuracy: true }
+      );
+    };
+
+    sendLocation(); // initial
+    const interval = setInterval(sendLocation, 15000); // update every 15s
+    return () => clearInterval(interval);
+  }, [step, group, user]);
+
+  // UI
   return (
-    <div style={{ padding: "20px", fontFamily: "Arial" }}>
+    <div style={{ maxWidth: 600, margin: "auto", padding: 20 }}>
       <h1>OSU Meeting Spot Finder</h1>
 
-      {/* 🔎 Search bar */}
-      <input
-        type="text"
-        placeholder="Search buildings..."
-        value={search}
-        onChange={handleSearch}
-        style={{ marginBottom: "10px", width: "300px", padding: "5px" }}
-      />
-
-      {/* ✅ Scrollable checkbox menu */}
-      <div
-        style={{
-          border: "1px solid #ccc",
-          height: "200px",
-          width: "320px",
-          overflowY: "scroll",
-          padding: "10px",
-          marginBottom: "15px",
-        }}
-      >
-        {filteredBuildings.map((b, idx) => (
-          <div key={idx}>
-            <label>
-              <input
-                type="checkbox"
-                checked={selectedBuildings.includes(b)}
-                onChange={() => toggleBuilding(b)}
-              />
-              {b}
-            </label>
+      {step === "start" && (
+        <div>
+          <input
+            type="text"
+            placeholder="Your Name"
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            style={{ marginRight: "10px" }}
+          />
+          <input
+            type="text"
+            placeholder="Group Name"
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+          />
+          <div style={{ marginTop: "10px" }}>
+            <button onClick={createGroup} style={{ marginRight: "10px" }}>
+              Create Group
+            </button>
+            <button onClick={joinGroup}>Join Group</button>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
-      {/* Time range */}
-      <label>
-        Start Time:
-        <input type="time" value={start} onChange={(e) => setStart(e.target.value)} />
-      </label>
-      <label>
-        End Time:
-        <input type="time" value={end} onChange={(e) => setEnd(e.target.value)} />
-      </label>
+      {step === "group" && (
+        <div>
+          <h2>Group: {group}</h2>
+          <p>Sharing GPS as <strong>{user}</strong>...</p>
+          {error && <p style={{ color: "red" }}>{error}</p>}
 
-      <br /><br />
-
-      {/* Day of week */}
-      <label>
-        Day of Week:
-        <select value={day} onChange={(e) => setDay(e.target.value)}>
-          <option value="mon">Monday</option>
-          <option value="tue">Tuesday</option>
-          <option value="wed">Wednesday</option>
-          <option value="thu">Thursday</option>
-          <option value="fri">Friday</option>
-        </select>
-      </label>
-
-      <br /><br />
-
-      <button onClick={handleSubmit}>Find Meeting Spot</button>
-
-      {/* Results */}
-      {result && (
-        <div style={{ border: "1px solid #ccc", marginTop: "20px", padding: "10px" }}>
-          <h2>Results</h2>
-          <p><strong>Closest Building:</strong> {result.closest_building}</p>
-          <p><strong>Average Location:</strong> {result.average_location.join(", ")}</p>
-          <p>
-            <strong>Free Rooms:</strong>{" "}
-            {Array.isArray(result.free_rooms) && result.free_rooms.length > 0
-              ? result.free_rooms.join(", ")
-              : "None"}
-          </p>
-          <p>
-            <strong>Occupied Rooms:</strong>{" "}
-            {Array.isArray(result.occupied_rooms) && result.occupied_rooms.length > 0
-              ? result.occupied_rooms.join(", ")
-              : "None"}
-          </p>
+          {results && results.top_buildings ? (
+            <>
+              <p>
+                <strong>Average Location:</strong>{" "}
+                {results.average_location?.map((c) => c.toFixed(5)).join(", ")}
+              </p>
+              <h3>Closest Available Buildings</h3>
+              <ul>
+                {results.top_buildings.map((b, i) => (
+                  <li key={i}>
+                    <strong>{b.building}</strong> — Free rooms:{" "}
+                    {Array.isArray(b.free_rooms) && b.free_rooms.length > 0
+                      ? b.free_rooms.join(", ")
+                      : "None"}
+                  </li>
+                ))}
+              </ul>
+              <h3>Members</h3>
+              <ul>
+                {results.members?.map((m, i) => (
+                  <li key={i}>{m}</li>
+                ))}
+              </ul>
+            </>
+          ) : (
+            <p>Waiting for updates...</p>
+          )}
         </div>
       )}
     </div>
