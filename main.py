@@ -1,149 +1,238 @@
-from flask import Flask, jsonify, request
-from flask_cors import CORS
-import json
 import os
+import json
 import math
 from datetime import datetime
+from flask import Flask, request, jsonify
+from flask_cors import CORS
 
+# -----------------------------
+# App + CORS
+# -----------------------------
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://osu-meeting-room-finder.netlify.app"}})
 
+# In dev: allow Vite (localhost:5173). Add your Netlify URL when deployed.
+CORS(app, resources={r"/api/*": {"origins": ["https://osu-meeting-room-finder.netlify.app"]}}, supports_credentials=True)
 
-# --- Load data ---
-base_dir = os.path.dirname(__file__)
+# accept both /path and /path/ without 404
+app.url_map.strict_slashes = False
 
-with open(os.path.join(base_dir, "buildings/usable_buildings.json"), "r") as f:
-    usable_buildings = json.load(f)
+# -----------------------------
+# Data loading helpers
+# -----------------------------
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-with open(os.path.join(base_dir, "buildings/building_classes.json"), "r") as f:
-    building_data = json.load(f)
+def load_json(filename, default):
+    path = os.path.join(BASE_DIR, filename)
+    if not os.path.exists(path):
+        return default
+    try:
+        with open(path, "r") as f:
+            return json.load(f)
+    except Exception:
+        return default
 
-with open(os.path.join(base_dir, "buildings/building_coords.json"), "r") as f:
-    building_coords = json.load(f)
+# Expected files (you already generated these earlier)
+# - usable_buildings.json: ["Dreese Laboratories", "Bolz Hall", ...]
+# - building_coords.json: {"Dreese Laboratories":[40.00,-83.01], ...}
+# - building_classes.json:
+#   {
+#     "Dreese Laboratories": {
+#        "rooms": ["100","201",...],
+#        "classes": [
+#           {"room":"201","startTime":"9:10 AM","endTime":"10:05 AM","days":{"mon":true,"tue":true,"wed":false,"thu":true,"fri":true}}
+#        ]
+#     }, ...
+#   }
+usable_buildings = load_json("buildings/usable_buildings.json", [])
+building_coords   = load_json("buildings/building_coords.json", {})          # name -> [lat, lon]
+building_data     = load_json("buildings/building_classes.json", {})         # name -> { rooms, classes }
 
+# -----------------------------
+# In-memory groups structure
+# -----------------------------
+# groups = { "groupName": { "members": { "userId": (lat, lon), ... } } }
+groups = {}
 
-# --- Utility functions ---
+# -----------------------------
+# Utility functions
+# -----------------------------
 def average_gps(*coords):
-    """Return spherical average of lat/lon coords."""
+    """Spherical average of lat/lon pairs."""
     if not coords:
-        raise ValueError("At least one coordinate must be provided.")
-
+        raise ValueError("No coordinates to average.")
     x_total = y_total = z_total = 0.0
     for lat, lon in coords:
-        lat_rad = math.radians(lat)
-        lon_rad = math.radians(lon)
-        x_total += math.cos(lat_rad) * math.cos(lon_rad)
-        y_total += math.cos(lat_rad) * math.sin(lon_rad)
-        z_total += math.sin(lat_rad)
-
-    num_points = len(coords)
-    x_avg = x_total / num_points
-    y_avg = y_total / num_points
-    z_avg = z_total / num_points
-
-    lon_avg = math.atan2(y_avg, x_avg)
-    hyp = math.sqrt(x_avg**2 + y_avg**2)
-    lat_avg = math.atan2(z_avg, hyp)
-
+        lat_r = math.radians(lat)
+        lon_r = math.radians(lon)
+        x_total += math.cos(lat_r) * math.cos(lon_r)
+        y_total += math.cos(lat_r) * math.sin(lon_r)
+        z_total += math.sin(lat_r)
+    n = len(coords)
+    x, y, z = x_total/n, y_total/n, z_total/n
+    lon_avg = math.atan2(y, x)
+    hyp = math.sqrt(x*x + y*y)
+    lat_avg = math.atan2(z, hyp)
     return math.degrees(lat_avg), math.degrees(lon_avg)
 
-
-def haversine(coord1, coord2):
-    """Distance in km between two (lat, lon)."""
-    R = 6371
-    lat1, lon1 = map(math.radians, coord1)
-    lat2, lon2 = map(math.radians, coord2)
+def haversine_km(a, b):
+    R = 6371.0
+    lat1, lon1 = map(math.radians, a)
+    lat2, lon2 = map(math.radians, b)
     dlat = lat2 - lat1
     dlon = lon2 - lon1
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-    return 2 * R * math.asin(math.sqrt(a))
+    s = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+    return 2 * R * math.asin(math.sqrt(s))
 
+def parse_time_12h(s):
+    """'9:10 AM' -> datetime.time; returns None if bad."""
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s.strip(), "%I:%M %p").time()
+    except Exception:
+        return None
 
-# --- Routes ---
+def rooms_free_now(building_name, when=None, day_key=None):
+    """
+    Return list of free rooms for building at 'when' (datetime.time) on 'day_key' (mon,tue,...).
+    Defaults: now + today's weekday.
+    """
+    if building_name not in building_data:
+        return []
+
+    bd = building_data[building_name]
+    all_rooms = bd.get("rooms", [])
+    classes = bd.get("classes", [])
+
+    if when is None:
+        when = datetime.now().time()
+
+    if day_key is None:
+        day_key = datetime.today().strftime("%a").lower()[:3]  # mon,tue,...
+
+    occupied = set()
+    for c in classes:
+        room = c.get("room")
+        if not room:
+            continue
+        days = (c.get("days") or {})
+        if not days.get(day_key, False):
+            continue
+        st = parse_time_12h(c.get("startTime"))
+        et = parse_time_12h(c.get("endTime"))
+        if not st or not et:
+            continue
+        # overlap if st <= when < et
+        if st <= when < et:
+            occupied.add(room)
+
+    return [r for r in all_rooms if r not in occupied]
+
+# -----------------------------
+# API Routes
+# -----------------------------
+
+@app.route("/ping", methods=["GET"])
+def ping():
+    return "pong", 200
+
 @app.route("/api/buildings", methods=["GET"])
 def get_buildings():
     return jsonify({"buildings": usable_buildings})
 
+@app.route("/api/create_group", methods=["POST"])
+def create_group():
+    data = request.get_json(silent=True) or {}
+    group = str(data.get("group") or "").strip()
+    if not group:
+        return jsonify({"error": "Group is required"}), 400
+    if group in groups:
+        # idempotent create
+        return jsonify({"message": "Group already exists", "group": group}), 200
+    groups[group] = {"members": {}}
+    return jsonify({"message": "Group created", "group": group}), 200
 
-@app.route("/api/buildings/<building_name>", methods=["GET"])
-def get_building_classes(building_name):
-    if building_name not in building_data:
-        return jsonify({"error": "Building not found"}), 404
-    return jsonify(building_data[building_name])
+@app.route("/api/join_group", methods=["POST"])
+def join_group():
+    data = request.get_json(silent=True) or {}
+    group = str(data.get("group") or "").strip()
+    user  = str(data.get("user") or "").strip()
+    if not group or not user:
+        return jsonify({"error": "Group and user are required"}), 400
+    if group not in groups:
+        return jsonify({"error": "Group not found"}), 404
+    groups[group]["members"].setdefault(user, None)
+    return jsonify({"message": f"{user} joined {group}"}), 200
 
+@app.route("/api/update_location", methods=["POST"])
+def update_location():
+    data = request.get_json(silent=True) or {}
+    group = str(data.get("group") or "").strip()
+    user  = str(data.get("user") or "").strip()
+    lat   = data.get("lat", None)
+    lon   = data.get("lon", None)
 
-@app.route("/api/meeting-spot", methods=["POST"])
-def meeting_spot():
-    data = request.json
-    building_list = data.get("buildings", [])
-    start_str = data.get("start")
-    end_str = data.get("end")
-    day = data.get("day", "mon").lower()
+    if not group or not user or lat is None or lon is None:
+        return jsonify({"error": "group, user, lat, lon required"}), 400
+    if group not in groups:
+        return jsonify({"error": "Group not found"}), 404
 
-    if not building_list:
-        return jsonify({"error": "No buildings provided"}), 400
+    # Auto-add user to group if not present (nice UX for hackathon)
+    if user not in groups[group]["members"]:
+        groups[group]["members"][user] = None
 
-    coords = [tuple(building_coords[b]) for b in building_list if b in building_coords]
+    # Update location
+    try:
+        lat = float(lat)
+        lon = float(lon)
+    except Exception:
+        return jsonify({"error": "lat/lon must be numbers"}), 400
+
+    groups[group]["members"][user] = (lat, lon)
+
+    # Gather current known coords
+    coords = [c for c in groups[group]["members"].values() if c]
     if not coords:
-        return jsonify({"error": "No valid buildings with coordinates"}), 400
+        return jsonify({"error": "No coordinates yet"}), 400
 
+    # Average GPS
     avg_lat, avg_lon = average_gps(*coords)
 
-    try:
-        start_time = datetime.strptime(start_str, "%H:%M").time()
-        end_time = datetime.strptime(end_str, "%H:%M").time()
-    except Exception:
-        return jsonify({"error": "Invalid start/end time"}), 400
+    # Find top 3 closest buildings that have free rooms now
+    now = datetime.now().time()
+    today_key = datetime.today().strftime("%a").lower()[:3]
 
-    # Sort buildings by distance to average location
-    distances = []
-    for b, coord in building_coords.items():
-        dist = haversine((avg_lat, avg_lon), tuple(coord))
-        distances.append((dist, b))
-    distances.sort()
-
-    # Try buildings in order until free rooms are found
-    for _, candidate in distances:
-        if candidate not in building_data:
+    candidates = []
+    for bname, coord in building_coords.items():
+        if bname not in building_data:
             continue
+        try:
+            dist = haversine_km((avg_lat, avg_lon), (coord[0], coord[1]))
+        except Exception:
+            continue
+        free = rooms_free_now(bname, when=now, day_key=today_key)
+        if free:
+            candidates.append((dist, bname, free))
 
-        occupied_rooms = set()
-        data_b = building_data[candidate]
+    candidates.sort(key=lambda t: t[0])
+    top3 = [{"building": b, "free_rooms": rooms} for _, b, rooms in candidates[:3]]
 
-        for c in data_b["classes"]:
-            if not c["startTime"] or not c["endTime"]:
-                continue
-            if not c["days"].get(day, False):
-                continue
-            try:
-                class_start = datetime.strptime(c["startTime"], "%I:%M %p").time()
-                class_end = datetime.strptime(c["endTime"], "%I:%M %p").time()
-            except ValueError:
-                continue
-            # overlap check
-            if not (class_end <= start_time or class_start >= end_time):
-                occupied_rooms.add(c["room"])
-
-        free_rooms = [r for r in data_b["rooms"] if r not in occupied_rooms]
-
-        if free_rooms:  # return first building with available rooms
-            return jsonify({
-                "closest_building": candidate,
-                "average_location": [avg_lat, avg_lon],
-                "free_rooms": free_rooms,
-                "occupied_rooms": list(occupied_rooms)
-            })
-
-    # If no free rooms in any building
     return jsonify({
-        "closest_building": None,
         "average_location": [avg_lat, avg_lon],
-        "free_rooms": [],
-        "occupied_rooms": []
-    })
+        "top_buildings": top3,
+        "members": list(groups[group]["members"].keys())
+    }), 200
 
+# -----------------------------
+# Dev runner
+# -----------------------------
+def print_routes():
+    print("Registered routes:")
+    for rule in app.url_map.iter_rules():
+        methods = ",".join(sorted(rule.methods))
+        print(f"{rule.endpoint:20s} {methods:20s} {rule}")
 
-# --- Run ---
 if __name__ == "__main__":
+    print_routes()
     app.run(host="0.0.0.0", port=5001, debug=True)
 
