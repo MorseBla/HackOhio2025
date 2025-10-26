@@ -24,7 +24,7 @@ function GroupSelectionPage() {
         throw new Error("Failed to join/create group");
       }
       setError("");
-      navigate("/group", { state: { group, user } }); // go to GroupPage
+      navigate("/group", { state: { group, user } }); 
     } catch (err) {
       setError("Error: " + err.message);
     }

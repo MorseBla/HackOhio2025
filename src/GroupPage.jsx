@@ -87,7 +87,6 @@ function GroupPage() {
         </select>
       </div>
 
-      {/* Results */}
       {results && results.top_buildings ? (
         <>
           <p className="text-center">

@@ -14,7 +14,6 @@ function ManualPage() {
     const BACKEND = import.meta.env.VITE_API_BASE;
     //const BACKEND = "http://127.0.0.1:5001";
 
-    // Load building list
     useEffect(() => {
         fetch(`${BACKEND}/api/buildings`)
             .then((res) => res.json())
@@ -30,7 +29,6 @@ function ManualPage() {
             });
     }, []);
 
-    // Search filter
     useEffect(() => {
         const lower = search.toLowerCase();
         setFiltered(buildings.filter((b) => b.toLowerCase().includes(lower)));
@@ -73,8 +71,8 @@ function ManualPage() {
             />
             <div
                 style={{
-                    maxHeight: "300px", // controls visible height
-                    overflowY: "auto", // makes it scrollable
+                    maxHeight: "300px", 
+                    overflowY: "auto", 
                     border: "1px solid #ccc",
                     padding: "8px",
                     marginBottom: "16px",
@@ -131,7 +129,6 @@ function ManualPage() {
             </button>
         </div>
     </div>
-            {/* Results */}
             {results && results.top_buildings && (
                 <div className="mt-6">
                     <h2 className="text-lg font-semibold">Top 3 Closest</h2>
