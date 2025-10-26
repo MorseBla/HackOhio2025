@@ -27,23 +27,12 @@ usable_buildings = load_json("buildings/usable_buildings.json", [])
 building_coords   = load_json("buildings/building_coords.json", {})
 building_data     = load_json("buildings/building_classes.json", {})
 
-# groups = { "groupName": { "members": { "userId": (lat, lon), ... }, "start": "HH:MM", "end": "HH:MM", "day": "mon" } }
 groups = load_groups()
 
-# --------------------------
-# Utility functions
-# --------------------------
 
 
 
 def rooms_free_now(building_name, when=None, day_key=None, start=None, end=None):
-    """
-    Return list of free rooms for building at given time range and day.
-    - building_name: str
-    - when: datetime.time (fallback single point in time if no start/end)
-    - day_key: 'mon', 'tue', ...
-    - start, end: optional datetime.time range
-    """
     if building_name not in building_data:
         return []
 
@@ -85,7 +74,6 @@ def rooms_free_now(building_name, when=None, day_key=None, start=None, end=None)
 
 
 def parse_time_12h(s):
-    """Convert '9:10 AM' style strings into datetime.time. Returns None if invalid."""
     if not s:
         return None
     try:
@@ -127,7 +115,6 @@ def parse_time_24h(s):
         return None
 
 def rooms_free_in_range(building_name, start, end, day_key):
-    """Return free rooms if they are not occupied in [start,end)."""
     if building_name not in building_data:
         return []
     bd = building_data[building_name]
@@ -149,10 +136,6 @@ def rooms_free_in_range(building_name, start, end, day_key):
             occupied.add(room)
     return [r for r in all_rooms if r not in occupied]
 
-# --------------------------
-# Routes
-# --------------------------
-@app.route("/api/buildings", methods=["GET"])
 def get_buildings():
     return jsonify({"buildings": usable_buildings})
 
@@ -246,10 +229,12 @@ def update_location():
 
     if not group or not user or lat is None or lon is None:
         return jsonify({"error": "group, user, lat, lon required"}), 400
-    if group not in groups:
-        return jsonify({"error": "Group not found"}), 404
 
-    # Auto-add user to group if not present
+
+    if group not in groups:
+        groups[group] = {"members": {}}
+
+
 
     try:
         lat = float(lat)
