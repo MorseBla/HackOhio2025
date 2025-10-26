@@ -8,7 +8,7 @@ from storage import load_groups, save_groups
 from datetime import datetime, timedelta
 
 app = Flask(__name__)
-CORS(app)  # allow cross-origin
+CORS(app) 
 app.url_map.strict_slashes = False
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -131,7 +131,6 @@ def rooms_free_in_range(building_name, start, end, day_key):
         et = datetime.strptime(c["endTime"], "%I:%M %p").time() if c.get("endTime") else None
         if not st or not et:
             continue
-        # overlap condition: (st < end) and (et > start)
         if st < end and et > start:
             occupied.add(room)
     return [r for r in all_rooms if r not in occupied]
@@ -245,14 +244,12 @@ def update_location():
     groups[group]["members"][user] = (lat, lon)
     save_groups(groups)
 
-    # Gather coords
     coords = [c for c in groups[group]["members"].values() if c]
     if not coords:
         return jsonify({"error": "No coordinates yet"}), 400
 
     avg_lat, avg_lon = average_gps(*coords)
 
-    # ---- NEW: flexible time/day handling ----
     start = parse_time_12h(data.get("startTime"))
     end   = parse_time_12h(data.get("endTime"))
     if not start:
@@ -271,7 +268,6 @@ def update_location():
             continue
         dist = haversine((avg_lat, avg_lon), (coord[0], coord[1]))
         free = rooms_free_now(bname, when=start, day_key=day)
-        # optional: ensure room is free during the whole range
         free = [
             r for r in free
             if all(
@@ -306,9 +302,6 @@ def update_location():
 
 
 
-# --------------------------
-# Runner
-# --------------------------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=True)
 

@@ -6,9 +6,8 @@ import math
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app)  # allow requests from frontend
+CORS(app)  
 
-# --- Load data ---
 base_dir = os.path.dirname(__file__)
 
 with open(os.path.join(base_dir, "buildings/usable_buildings.json"), "r") as f:
@@ -21,7 +20,6 @@ with open(os.path.join(base_dir, "buildings/building_coords.json"), "r") as f:
     building_coords = json.load(f)
 
 
-# --- Utility functions ---
 def average_gps(*coords):
     """Return spherical average of lat/lon coords."""
     if not coords:
@@ -58,7 +56,6 @@ def haversine(coord1, coord2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
-# --- Routes ---
 @app.route("/api/buildings", methods=["GET"])
 def get_buildings():
     return jsonify({"buildings": usable_buildings})
@@ -94,14 +91,12 @@ def meeting_spot():
     except Exception:
         return jsonify({"error": "Invalid start/end time"}), 400
 
-    # Sort buildings by distance to average location
     distances = []
     for b, coord in building_coords.items():
         dist = haversine((avg_lat, avg_lon), tuple(coord))
         distances.append((dist, b))
     distances.sort()
 
-    # Try buildings in order until free rooms are found
     for _, candidate in distances:
         if candidate not in building_data:
             continue
@@ -119,13 +114,12 @@ def meeting_spot():
                 class_end = datetime.strptime(c["endTime"], "%I:%M %p").time()
             except ValueError:
                 continue
-            # overlap check
             if not (class_end <= start_time or class_start >= end_time):
                 occupied_rooms.add(c["room"])
 
         free_rooms = [r for r in data_b["rooms"] if r not in occupied_rooms]
 
-        if free_rooms:  # return first building with available rooms
+        if free_rooms:  
             return jsonify({
                 "closest_building": candidate,
                 "average_location": [avg_lat, avg_lon],
@@ -133,7 +127,6 @@ def meeting_spot():
                 "occupied_rooms": list(occupied_rooms)
             })
 
-    # If no free rooms in any building
     return jsonify({
         "closest_building": None,
         "average_location": [avg_lat, avg_lon],
