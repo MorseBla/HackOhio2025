@@ -11,13 +11,13 @@ CORS(app)  # allow requests from frontend
 # --- Load data ---
 base_dir = os.path.dirname(__file__)
 
-with open(os.path.join(base_dir, "../buildings/usable_buildings.json"), "r") as f:
+with open(os.path.join(base_dir, "buildings/usable_buildings.json"), "r") as f:
     usable_buildings = json.load(f)
 
-with open(os.path.join(base_dir, "../buildings/building_classes.json"), "r") as f:
+with open(os.path.join(base_dir, "buildings/building_classes.json"), "r") as f:
     building_data = json.load(f)
 
-with open(os.path.join(base_dir, "../buildings/building_coords.json"), "r") as f:
+with open(os.path.join(base_dir, "buildings/building_coords.json"), "r") as f:
     building_coords = json.load(f)
 
 
