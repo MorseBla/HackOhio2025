@@ -7,8 +7,9 @@ function App() {
   const [results, setResults] = useState(null);
   const [error, setError] = useState("");
 
+    //const BACKEND = "http://127.0.0.1:5001"; 
   const BACKEND = import.meta.env.VITE_API_BASE;
-    
+
     // Create group
   const createGroup = async () => {
     if (!group || !user) return;
