@@ -5,8 +5,8 @@ function GroupSelectionPage() {
   const [group, setGroup] = useState("");
   const [user, setUser] = useState("");
   const [error, setError] = useState("");
-    //const BACKEND = import.meta.env.VITE_API_BASE;
-    const BACKEND = "http://127.0.0.1:5001"; 
+    const BACKEND = import.meta.env.VITE_API_BASE;
+    //const BACKEND = "http://127.0.0.1:5001"; 
   const navigate = useNavigate();
 
   const handleGroupAction = async (action) => {
