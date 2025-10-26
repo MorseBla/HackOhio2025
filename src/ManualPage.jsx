@@ -60,28 +60,26 @@ function ManualPage() {
     return (
         <div className="p-6 container"  >
             <h1 className=" mt-3 text-center text-decoration-underline fw-bold text-xl font-bold mb-4">Manual Mode</h1>
-            <div className="w-25 container px-5">
-            {/* Search + scrollable checklist */}
-            <input
+            <div className="col-9 col-md-6 col-lg-6 col-xl-4 container px-5">
+                
+        <input
                 type="text"
                 placeholder="Search buildings..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="border p-2 w-full mb-2"
             />
-            <div
+            <div className="p-2"
                 style={{
                     maxHeight: "300px", 
                     overflowY: "auto", 
                     border: "1px solid #ccc",
-                    padding: "8px",
-                    marginBottom: "16px",
                 }}
             >
                 {filtered.map((b, i) => (
                     <div key={i}>
                         <label>
-                            <input
+                            <input className="mt-3 me-2"
                                 type="checkbox"
                                 checked={selected.includes(b)}
                                 onChange={() => toggleBuilding(b)}
@@ -125,7 +123,7 @@ function ManualPage() {
                 onClick={calculate}
                 className=" mt-4 px-4 py-2 bg-blue-600 text-white rounded"
             >
-                Find Closest
+                Find Room
             </button>
         </div>
     </div>

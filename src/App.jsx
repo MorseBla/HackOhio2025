@@ -13,12 +13,12 @@ function App() {
         <h1 className="navbar-brand" href="#">
           OSU Group Meeting Finder
         </h1>
-        <div>
-            <Link to="/" className="mx-4 nav-link d-inline text-white"  >
-            Group Mode
+        <div className="d-flex flex-row-reverse">
+            <Link to="/" className=" text-decoration-underline mx-3 nav-link d-inline text-white"  >
+                Group Mode
           </Link>
-          <Link to="/manual" className="mx-4 nav-link d-inline text-white" >
-            Manual Mode
+          <Link to="/manual" className=" text-decoration-underline nav-link d-inline text-white" >
+              Manual Mode
           </Link>
         </div>
       </div>

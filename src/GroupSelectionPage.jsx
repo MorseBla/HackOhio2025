@@ -7,7 +7,7 @@ function GroupSelectionPage() {
   const [error, setError] = useState("");
     const BACKEND = import.meta.env.VITE_API_BASE;
     //const BACKEND = "http://127.0.0.1:5001"; 
-  const navigate = useNavigate();
+    const navigate = useNavigate();
 
   const handleGroupAction = async (action) => {
     if (!group || !user) {
@@ -31,11 +31,12 @@ function GroupSelectionPage() {
   };
 
   return (
-      <div  className="mt-3">
+      <div  className="mt-3 container">
       <h1 className="text-center text-decoration-underline fw-bold text-xl font-bold mb-4">Join or Create a Group</h1>
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      <div className="d-flex justify-content-center">    
-    <input
+      {error && <p className="text-center" style={{ color: "red" }}>{error}</p>}
+      <div className=" container d-flex justify-content-center">    
+          <input
+          className="col-4 col-md-3 col-lg-2"
         type="text"
         placeholder="Your Name"
         value={user}
@@ -43,6 +44,7 @@ function GroupSelectionPage() {
         style={{ marginRight: "10px" }}
       />
       <input
+          className="col-4 col-md-3 col-lg-2"
         type="text"
         placeholder="Group Name"
         value={group}
