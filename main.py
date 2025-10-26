@@ -240,6 +240,9 @@ def update_location():
     user  = str(data.get("user") or "").strip()
     lat   = data.get("lat", None)
     lon   = data.get("lon", None)
+    
+    if user not in groups[group]["members"]:
+        groups[group]["members"][user] = None
 
     if not group or not user or lat is None or lon is None:
         return jsonify({"error": "group, user, lat, lon required"}), 400
@@ -247,8 +250,6 @@ def update_location():
         return jsonify({"error": "Group not found"}), 404
 
     # Auto-add user to group if not present
-    if user not in groups[group]["members"]:
-        groups[group]["members"][user] = None
 
     try:
         lat = float(lat)
