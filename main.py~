@@ -6,8 +6,7 @@ import math
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "https://osu-meeting-room-finder.netlify.app"}})
-
+CORS(app)  # allow requests from frontend
 
 # --- Load data ---
 base_dir = os.path.dirname(__file__)
