@@ -35,4 +35,4 @@ def average_gps(*coords):
 
 points = [(40.0, -83.0), (41.0, -82.0), (39.5, -84.0)]
 avg_lat, avg_lon = average_gps(*points)
-print(f"Average location: {avg_lat:.5f}, {avg_lon:.5f}")
+return avg_lat, avg_lon
