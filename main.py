@@ -222,13 +222,20 @@ def update_location():
     user  = str(data.get("user") or "").strip()
     lat   = data.get("lat", None)
     lon   = data.get("lon", None)
+ 
+    start_time = data.get("startTime")
+    end_time   = data.get("endTime")
+    day_key    = data.get("day")
+    
+    if not group or not user or lat is None or lon is None:
+        return jsonify({"error": "group, user, lat, lon required"}), 400
     
     if user not in groups[group]["members"]:
         groups[group]["members"][user] = None
 
-    if not group or not user or lat is None or lon is None:
-        return jsonify({"error": "group, user, lat, lon required"}), 400
 
+    if group not in groups:
+        return jsonify({"error": f"Group '{group}' not found. Please create or join first."}), 404
 
     if group not in groups:
         groups[group] = {"members": {}}
@@ -250,52 +257,42 @@ def update_location():
 
     avg_lat, avg_lon = average_gps(*coords)
 
-    start = parse_time_12h(data.get("startTime"))
-    end   = parse_time_12h(data.get("endTime"))
-    if not start:
-        start = datetime.now().time()
-    if not end:
-        end = (datetime.now() + timedelta(hours=1)).time()
+    if start_time and end_time:
+        try:
+            start = parse_time_12h(start_time)
+            end   = parse_time_12h(end_time)
+        except:
+            start, end = None, None
+    else:
+        now = datetime.now().time()
+        start, end = now, now
 
-    day = data.get("day")
-    if not day:
-        day = datetime.today().strftime("%a").lower()[:3]
 
-    # Find top 3 closest buildings with free rooms
+    if not day_key:
+        day_key = datetime.today().strftime("%a").lower()[:3]
+    
     candidates = []
     for bname, coord in building_coords.items():
         if bname not in building_data:
             continue
-        dist = haversine((avg_lat, avg_lon), (coord[0], coord[1]))
+        try:
+            dist = haversine((avg_lat, avg_lon), (coord[0], coord[1]))
+        except Exception:
+            continue
         free = rooms_free_now(bname, when=start, day_key=day)
-        free = [
-            r for r in free
-            if all(
-                not (
-                    parse_time_12h(c.get("startTime")) and
-                    parse_time_12h(c.get("endTime")) and
-                    (parse_time_12h(c["startTime"]) < end and
-                     parse_time_12h(c["endTime"]) > start)
-                )
-                for c in building_data[bname]["classes"]
-                if c.get("room") == r and (c.get("days") or {}).get(day, False)
-            )
-        ]
         if free:
             candidates.append((dist, bname, free))
+        
+        candidates.sort(key=lambda t: t[0]) 
 
-    candidates.sort(key=lambda t: t[0])
-    top3 = [{"building": b, "free_rooms": rooms} for _, b, rooms in candidates[:3]]
+        top3 = [{"building": b, "free_rooms": rooms} for _, b, rooms in candidates[:3]]
+
+
 
     return jsonify({
         "average_location": [avg_lat, avg_lon],
         "top_buildings": top3,
         "members": list(groups[group]["members"].keys()),
-        "time_range": {
-            "start": start.strftime("%I:%M %p"),
-            "end": end.strftime("%I:%M %p"),
-            "day": day
-        }
     }), 200
 
 
