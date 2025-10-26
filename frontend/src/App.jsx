@@ -59,7 +59,6 @@ function App() {
     <div style={{ padding: "20px", fontFamily: "Arial" }}>
       <h1>OSU Meeting Spot Finder</h1>
 
-      {/* 🔎 Search bar */}
       <input
         type="text"
         placeholder="Search buildings..."
@@ -68,7 +67,6 @@ function App() {
         style={{ marginBottom: "10px", width: "300px", padding: "5px" }}
       />
 
-      {/* ✅ Scrollable checkbox menu */}
       <div
         style={{
           border: "1px solid #ccc",
@@ -93,7 +91,6 @@ function App() {
         ))}
       </div>
 
-      {/* Time range */}
       <label>
         Start Time:
         <input type="time" value={start} onChange={(e) => setStart(e.target.value)} />
@@ -105,7 +102,6 @@ function App() {
 
       <br /><br />
 
-      {/* Day of week */}
       <label>
         Day of Week:
         <select value={day} onChange={(e) => setDay(e.target.value)}>
@@ -121,7 +117,6 @@ function App() {
 
       <button onClick={handleSubmit}>Find Meeting Spot</button>
 
-      {/* Results */}
       {result && (
         <div style={{ border: "1px solid #ccc", marginTop: "20px", padding: "10px" }}>
           <h2>Results</h2>

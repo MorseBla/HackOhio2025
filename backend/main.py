@@ -6,9 +6,9 @@ import math
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app)  # allow requests from frontend
+CORS(app)  
 
-# --- Load data ---
+# Load data 
 base_dir = os.path.dirname(__file__)
 
 with open(os.path.join(base_dir, "../buildings/usable_buildings.json"), "r") as f:
@@ -21,9 +21,8 @@ with open(os.path.join(base_dir, "../buildings/building_coords.json"), "r") as f
     building_coords = json.load(f)
 
 
-# --- Utility functions ---
+# Utility functions 
 def average_gps(*coords):
-    """Return spherical average of lat/lon coords."""
     if not coords:
         raise ValueError("At least one coordinate must be provided.")
 
@@ -58,7 +57,7 @@ def haversine(coord1, coord2):
     return 2 * R * math.asin(math.sqrt(a))
 
 
-# --- Routes ---
+# Routes 
 @app.route("/api/buildings", methods=["GET"])
 def get_buildings():
     return jsonify({"buildings": usable_buildings})
@@ -119,7 +118,7 @@ def meeting_spot():
                 class_end = datetime.strptime(c["endTime"], "%I:%M %p").time()
             except ValueError:
                 continue
-            # overlap check
+            
             if not (class_end <= start_time or class_start >= end_time):
                 occupied_rooms.add(c["room"])
 
@@ -142,7 +141,7 @@ def meeting_spot():
     })
 
 
-# --- Run ---
+# Run 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5001, debug=True)
 
